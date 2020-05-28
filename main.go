@@ -185,11 +185,6 @@ func getSnippets() {
 	// Read Response Body
 	respBody, _ := ioutil.ReadAll(resp.Body)
 
-	// Display Results
-	//fmt.Println("response Status : ", resp.Status)
-	//fmt.Println("response Headers : ", resp.Header)
-	//fmt.Println("response Body : ", string(respBody))
-
 	apiResponse := APISnippetResponse{}
 
 	json.Unmarshal(respBody, &apiResponse)
@@ -198,8 +193,6 @@ func getSnippets() {
 	// if err := json.Unmarshal(respBody, &apiResponse); err != nil {
 	// 	panic(err)
 	// }
-
-	//fmt.Println(String(respBody))
 
 	// Set snippets
 	snippets = apiResponse.Data
