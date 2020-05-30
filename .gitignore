@@ -5,6 +5,8 @@
 *.so
 *.dylib
 ko-snippet-sync
+ko-snippet-sync.dmg
+ko-snippet-sync.zip
 
 # Test binary, built with `go test -c`
 *.test
@@ -17,3 +19,9 @@ ko-snippet-sync
 
 # kbs directory
 kbs
+
+# Env file
+.env
+
+# Signing App Config
+gon_config.json

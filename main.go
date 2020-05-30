@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"regexp"
 	"time"
 
 	"github.com/radovskyb/watcher"
@@ -16,14 +17,30 @@ import (
 	input "github.com/tcnksm/go-input"
 )
 
-var apiKey string = ""
-var baseURL string = "https://app.knowledgeowl.com"
-var snippets []Snippet
-var projectID string = ""
+// Every release we should increase this.
+const version = "0.0.2"
 
+// Vars to the main package
+var kbID = ""
+var apiKey = ""
+var baseURL = "https://app.knowledgeowl.com"
+var snippets []Snippet
+
+//
+// Starting point of the app.
+//
 func main() {
+	// Info version handy for debugging
+	Info("Using version: " + version)
+	Info("")
+
+	// This asks the user all the API keys and such.
 	bootUp()
+
+	// This downloads all the snippets in the DB.
 	getSnippets()
+
+	// This watching the directory for changes, and then uploads them to KO
 	dirWatch()
 }
 
@@ -41,6 +58,7 @@ func bootUp() {
 		Default:  apiKey,
 		Required: true,
 		Loop:     true,
+		Hide:     true,
 	})
 
 	if err != nil {
@@ -50,8 +68,8 @@ func bootUp() {
 	apiKey = a
 
 	// Get project ID
-	p, err := ui.Ask("What is your project id?", &input.Options{
-		Default:  projectID,
+	p, err := ui.Ask("What is your knowledge base id?", &input.Options{
+		Default:  kbID,
 		Required: true,
 		Loop:     true,
 	})
@@ -60,7 +78,7 @@ func bootUp() {
 		panic(err)
 	}
 
-	projectID = p
+	kbID = p
 
 	// Server address
 	b, err := ui.Ask("What is the url to your knowledge base API?", &input.Options{
@@ -91,14 +109,19 @@ func dirWatch() {
 	// Only notify on file write.
 	w.FilterOps(watcher.Write)
 
+	// We only want files that are *.html as they are the only files are are watching.
+	r := regexp.MustCompile("html$")
+	w.AddFilterHook(watcher.RegexFilterHook(r, false))
+
+	// Go routine to watch for file changes.
 	go func() {
 		for {
 			select {
 			case event := <-w.Event:
-				//fmt.Println(event) // Print the event's info.
+				//Info(event) // Print the event's info.
 				uploadModifedFile(event.Path)
 			case err := <-w.Error:
-				log.Fatalln(err)
+				Info(err.Error())
 			case <-w.Closed:
 				return
 			}
@@ -120,6 +143,8 @@ func dirWatch() {
 // uploadModifedFile will upload any changes to a snippet to the backend server.
 //
 func uploadModifedFile(file string) {
+	// File must containe
+
 	// Read file contents
 	body, err := ioutil.ReadFile(file)
 
@@ -129,7 +154,7 @@ func uploadModifedFile(file string) {
 
 	// Loop through and find this file. Then upload.
 	for _, row := range snippets {
-		if row.ProjectID == projectID && path.Base(file) == (row.Mergecode+".html") {
+		if row.ProjectID == kbID && path.Base(file) == (row.Mergecode+".html") {
 			doUpload(row.ID, string(body), file)
 		}
 	}
@@ -156,21 +181,24 @@ func doUpload(id string, bodyStr string, file string) {
 	_, err = client.Do(req)
 
 	if err != nil {
-		fmt.Println("Failure : ", err)
+		Info("Failure : " + err.Error())
 	}
 
-	fmt.Println("Syncing: ", file)
+	Info("Syncing: " + file)
 }
 
 //
 // getSnippets will make an api call to the KB servers to get all the snippets.
 //
 func getSnippets() {
+	// Make KB directory if it is not already there.
+	_ = os.Mkdir("kbs", os.ModePerm)
+
 	// Create client
 	client := &http.Client{}
 
 	// Create request
-	url := fmt.Sprintf("%s/api/head/snippet.json?project_id=%s", baseURL, projectID)
+	url := fmt.Sprintf("%s/api/head/snippet.json?project_id=%s", baseURL, kbID)
 	req, err := http.NewRequest("GET", url, nil)
 	req.SetBasicAuth(apiKey, "X")
 	req.Header.Add("Content-type", "application/json")
@@ -179,12 +207,19 @@ func getSnippets() {
 	resp, err := client.Do(req)
 
 	if err != nil {
-		fmt.Println("Failure : ", err)
+		Info("Failure : " + err.Error())
 	}
 
 	// Read Response Body
 	respBody, _ := ioutil.ReadAll(resp.Body)
 
+	// Make sure this was a success
+	if resp.StatusCode != 200 {
+		Info("response Body : " + string(respBody))
+		panic("Server failed to respond with a status code 200.")
+	}
+
+	// Setup response API object
 	apiResponse := APISnippetResponse{}
 
 	json.Unmarshal(respBody, &apiResponse)
@@ -194,12 +229,14 @@ func getSnippets() {
 	// 	panic(err)
 	// }
 
+	//Info(String(respBody))
+
 	// Set snippets
 	snippets = apiResponse.Data
 
 	for _, row := range snippets {
 		//spew.Dump(row)
-		//fmt.Println(row.CurrentVersion.En)
+		//Info(row.CurrentVersion.En)
 		// Touch the file
 		dir := "kbs/" + row.ProjectID
 		file := row.Mergecode + ".html"
@@ -213,10 +250,17 @@ func getSnippets() {
 			panic(err)
 		}
 
-		fmt.Println("Downloading: ", fullPath)
+		Info("Downloading: " + fullPath)
 	}
 
-	fmt.Println("")
+	Info("")
+}
+
+//
+// Info will Info information as the app is being used.
+//
+func Info(msg string) {
+	fmt.Println(msg)
 }
 
 /* End File */
