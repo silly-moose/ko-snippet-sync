@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/radovskyb/watcher"
@@ -18,7 +19,7 @@ import (
 )
 
 // Every release we should increase this.
-const version = "0.0.2"
+const version = "0.0.3"
 
 // Vars to the main package
 var kbID = ""
@@ -36,6 +37,9 @@ func main() {
 
 	// This asks the user all the API keys and such.
 	bootUp()
+
+	// Clean up base url.
+	baseURL = strings.TrimSpace(strings.TrimRight(baseURL, "/"))
 
 	// This downloads all the snippets in the DB.
 	getSnippets()
@@ -118,7 +122,7 @@ func dirWatch() {
 		for {
 			select {
 			case event := <-w.Event:
-				//Info(event) // Print the event's info.
+				Info(event.Path) // Print the event's info.
 				uploadModifedFile(event.Path)
 			case err := <-w.Error:
 				Info(err.Error())
@@ -143,8 +147,6 @@ func dirWatch() {
 // uploadModifedFile will upload any changes to a snippet to the backend server.
 //
 func uploadModifedFile(file string) {
-	// File must containe
-
 	// Read file contents
 	body, err := ioutil.ReadFile(file)
 
@@ -178,10 +180,19 @@ func doUpload(id string, bodyStr string, file string) {
 	req.Header.Add("Content-type", "application/json")
 
 	// Fetch Request
-	_, err = client.Do(req)
+	resp, err := client.Do(req)
 
 	if err != nil {
 		Info("Failure : " + err.Error())
+	}
+
+	// Read Response Body
+	respBody, _ := ioutil.ReadAll(resp.Body)
+
+	// Make sure this was a success
+	if resp.StatusCode != 200 {
+		Info("response Body : " + string(respBody))
+		panic("Server failed to respond with a status code 200.")
 	}
 
 	Info("Syncing: " + file)
