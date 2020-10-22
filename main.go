@@ -19,7 +19,7 @@ import (
 )
 
 // Every release we should increase this.
-const version = "0.0.4"
+const version = "0.0.5"
 
 // Vars to the main package
 var kbID = ""
@@ -157,15 +157,27 @@ func uploadModifedFile(file string) {
 	// Loop through and find this file. Then upload.
 	for _, row := range snippets {
 		if row.ProjectID == kbID && path.Base(file) == (row.Mergecode+".html") {
-			doUpload(row.ID, string(body), file)
+			doUpload(row.Mergecode, row.ID, string(body), file, false)
+			return
 		}
 	}
+
+	// Must be a new file.
+	mergeCode := strings.TrimSuffix(path.Base(file), ".html")
+
+	snippets = append(snippets, Snippet{
+		ProjectID: kbID,
+		Mergecode: mergeCode,
+	})
+
+	// Upload file to server
+	doUpload(mergeCode, "", string(body), file, true)
 }
 
 //
 // doUpload will upload the content to the KB server
 //
-func doUpload(id string, bodyStr string, file string) {
+func doUpload(mergeCode string, id string, bodyStr string, file string, createNew bool) {
 	// Clean up the json so there are no decode issues.
 	type postjson struct {
 		En string `json:"en"`
@@ -179,7 +191,7 @@ func doUpload(id string, bodyStr string, file string) {
 	}
 
 	// Build Body data.
-	json := []byte(`{"current_version": ` + string(b) + `}`)
+	json := []byte(`{"project_id": "` + kbID + `", "name": "` + mergeCode + `", "mergecode": "` + mergeCode + `", "description": "Created by KO Snippet Sync", "visibility": "public", "reader_roles": "false", "status": "active", "current_version": ` + string(b) + `}`)
 	body := bytes.NewBuffer(json)
 
 	// Create client
@@ -188,6 +200,13 @@ func doUpload(id string, bodyStr string, file string) {
 	// Create request
 	url := fmt.Sprintf("%s/api/head/snippet/%s.json", baseURL, id)
 	req, err := http.NewRequest("PUT", url, body)
+
+	// Is this a new snippet?
+	if createNew {
+		url = fmt.Sprintf("%s/api/head/snippet.json", baseURL)
+		req, err = http.NewRequest("POST", url, body)
+	}
+
 	req.SetBasicAuth(apiKey, "X")
 	req.Header.Add("Content-type", "application/json")
 
@@ -208,6 +227,11 @@ func doUpload(id string, bodyStr string, file string) {
 	}
 
 	Info("Syncing: " + file)
+
+	if createNew {
+		Info("Re-Syncing snippets...")
+		getSnippets()
+	}
 }
 
 //
