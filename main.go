@@ -19,7 +19,7 @@ import (
 )
 
 // Every release we should increase this.
-const version = "0.0.3"
+const version = "0.0.4"
 
 // Vars to the main package
 var kbID = ""
@@ -166,8 +166,20 @@ func uploadModifedFile(file string) {
 // doUpload will upload the content to the KB server
 //
 func doUpload(id string, bodyStr string, file string) {
+	// Clean up the json so there are no decode issues.
+	type postjson struct {
+		En string `json:"en"`
+	}
+
+	b, err := json.Marshal(postjson{En: bodyStr})
+
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+
 	// Build Body data.
-	json := []byte(`{"current_version": {"en": "` + bodyStr + `"}}`)
+	json := []byte(`{"current_version": ` + string(b) + `}`)
 	body := bytes.NewBuffer(json)
 
 	// Create client
